@@ -1,0 +1,17 @@
+<resources>
+    <string name="app_name">KT Telematic Task</string>
+    <string name="welcome_back">Welcome Back</string>
+    <string name="login_to_continue">Login to continue</string>
+    <string name="email">Email</string>
+    <string name="sign_in">Sign In</string>
+    <string name="create_new_account">Create new Account</string>
+    <string name="password">Password</string>
+    <string name="username">User Name</string>
+    <string name="confirm_password">Confirm Password</string>
+    <string name="sign_up">Sign UP</string>
+    <string name="cancel">Cancel</string>
+    <string name="decline">Decline</string>
+    <string name="accept">Accept</string>
+    <string name="title_activity_maps">MapsActivity</string>
+    <string name="logout">Logout</string>
+</resources>
