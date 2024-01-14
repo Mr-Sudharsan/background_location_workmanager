@@ -1,13 +1,17 @@
 package com.kttelematictask.activities
 
 import android.Manifest
+import android.app.job.JobInfo
+import android.app.job.JobScheduler
 import android.content.BroadcastReceiver
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.location.Geocoder
 import android.location.Location
+import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.view.View
@@ -15,6 +19,7 @@ import android.window.OnBackInvokedDispatcher
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.RequiresApi
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LiveData
@@ -32,6 +37,7 @@ import com.google.android.gms.location.LocationSettingsStatusCodes
 import com.google.android.gms.location.Priority
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.kttelematictask.LocationAdapter
+import com.kttelematictask.LocationJobService
 import com.kttelematictask.LocationWorker
 import com.kttelematictask.databinding.ActivityUsersBinding
 import com.kttelematictask.listeners.LocationClickListeners
@@ -54,10 +60,15 @@ class UsersActivity : AppCompatActivity(), LocationClickListeners {
     private lateinit var locationList: MutableList<LocationModel>
     private val userViewModel: UserViewModel by viewModel()
     private lateinit var geocoder: Geocoder
+    private lateinit var jobScheduler: JobScheduler
+    private lateinit var locationBroadcastReceiver: LocationBroadcastReceiver
     private val resolutionForResult =
         registerForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { activityResult ->
             if (activityResult.resultCode == RESULT_OK) {
-                initializeWorker()
+                if (!preferenceManager.getBoolean(Constants.IS_SERVICE_RUNNING)) {
+                    scheduleJob()
+                    // initializeWorker()
+                }
             } else {
             }
         }
@@ -76,14 +87,14 @@ class UsersActivity : AppCompatActivity(), LocationClickListeners {
                         dialog.cancel()
                     }.show()
             } else {
-                    
+
             }
         }
     private val requestBackgroundLocationLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission())
         { isGranted: Boolean ->
             if (isGranted) {
-               checkGps()
+                checkGps()
             }
         }
 
@@ -95,7 +106,9 @@ class UsersActivity : AppCompatActivity(), LocationClickListeners {
         preferenceManager = PreferenceManager(this)
         locationList = mutableListOf()
         geocoder = Geocoder(this)
-    //    locationBroadcastReceiver = LocationBroadcastReceiver()
+        locationBroadcastReceiver = LocationBroadcastReceiver()
+        jobScheduler = getSystemService(Context.JOB_SCHEDULER_SERVICE) as JobScheduler
+        //    locationBroadcastReceiver = LocationBroadcastReceiver()
         if (intent.hasExtra("userId")) {
             userId = intent.getStringExtra("userId").toString()
             println("User id : $userId")
@@ -107,21 +120,22 @@ class UsersActivity : AppCompatActivity(), LocationClickListeners {
 
         binding.logoutBtn.setOnClickListener {
             preferenceManager.putBoolean(Constants.IS_LOGGED_IN, false)
-//            LocalBroadcastManager.getInstance(this).unregisterReceiver(locationBroadcastReceiver)
+            preferenceManager.putBoolean(Constants.IS_SERVICE_RUNNING, false)
+            LocalBroadcastManager.getInstance(this).unregisterReceiver(locationBroadcastReceiver)
             WorkManager.getInstance(this).cancelAllWorkByTag(userId)
             val intent = Intent(this@UsersActivity, SignInActivity::class.java)
             startActivity(intent)
         }
 
-        onBackPressedDispatcher.addCallback(this, object: OnBackPressedCallback(true) {
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 println("Back button pressed")
                 MaterialAlertDialogBuilder(this@UsersActivity).setTitle("Exit")
                     .setMessage("Are you sure want to exit")
-                    .setPositiveButton("ok"){dialog,_->
+                    .setPositiveButton("ok") { dialog, _ ->
                         dialog.dismiss()
                         finish()
-                    }.setNegativeButton("cancel"){dialog,_->
+                    }.setNegativeButton("cancel") { dialog, _ ->
                         dialog.dismiss()
                     }.show()
             }
@@ -129,27 +143,38 @@ class UsersActivity : AppCompatActivity(), LocationClickListeners {
 
         binding.username.text = userId
 
-//        userViewModel.loadUserLocations(userId = userId)
-//
-//        userViewModel.userLocations.observe(this) { locationList ->
-//            locationAdapter = LocationAdapter(locationList, this)
-//            binding.locationRecyclerView.adapter = locationAdapter
-//            binding.locationRecyclerView.visibility = View.VISIBLE
-//        }
+        userViewModel.loadUserLocations(userId = userId)
+
+        userViewModel.userLocations.observe(this) { locationList ->
+            locationAdapter = LocationAdapter(locationList, this)
+            binding.locationRecyclerView.adapter = locationAdapter
+            binding.locationRecyclerView.visibility = View.VISIBLE
+        }
         checkAndRequestPermissions()
-        getLocationDataFromRealm(userId)
+        //getLocationDataFromRealm(userId)
+    }
+
+    private fun scheduleJob() {
+        val componentName = ComponentName(this, LocationJobService::class.java)
+        val jobInfoBuilder = JobInfo.Builder(101, componentName)
+        // Set the desired interval (15 minutes in milliseconds)
+        jobInfoBuilder.setPeriodic(15 * 60 * 1000)
+            .setPersisted(true)
+        // Specify additional constraints or settings if needed
+        // For example, setRequiredNetworkType, setRequiresCharging, etc.
+        jobScheduler.schedule(jobInfoBuilder.build())
+        preferenceManager.putBoolean(Constants.IS_SERVICE_RUNNING, true)
     }
 
     private fun initializeWorker() {
         // Create constraints to ensure the work only runs when conditions are met
         val constraints = Constraints.Builder()
-            .setRequiresCharging(false)
             .setRequiresDeviceIdle(false)
             .build()
 
         // Create the work request
         val periodicWorkRequest =
-            PeriodicWorkRequestBuilder<LocationWorker>(15, TimeUnit.MINUTES)
+            PeriodicWorkRequestBuilder<LocationWorker>(15, TimeUnit.MINUTES, 5, TimeUnit.MINUTES)
                 .setConstraints(constraints)
                 .addTag(userId)
                 .build()
@@ -170,27 +195,31 @@ class UsersActivity : AppCompatActivity(), LocationClickListeners {
                 when (workInfo.state) {
                     WorkInfo.State.SUCCEEDED -> {
                         println("WorkInfo State SUCCEEDED")
-                        // getLocationDataFromRealm(userId)
                     }
+
                     WorkInfo.State.BLOCKED -> {
                         println("WorkInfo State BLOCKED")
                     }
+
                     WorkInfo.State.ENQUEUED -> {
                         println("WorkInfo State ENQUEUED")
                     }
+
                     WorkInfo.State.FAILED -> {
                         println("WorkInfo State FAILED")
                     }
+
                     WorkInfo.State.RUNNING -> {
                         println("WorkInfo State RUNNING")
                     }
+
                     WorkInfo.State.CANCELLED -> {
                         println("WorkInfo State CANCELLED")
                     }
                 }
             }
         }
-
+        preferenceManager.putBoolean(Constants.IS_SERVICE_RUNNING, true)
 
     }
 
@@ -229,12 +258,13 @@ class UsersActivity : AppCompatActivity(), LocationClickListeners {
             checkGps()
         }
     }
+
     override fun onStart() {
         super.onStart()
-//        LocalBroadcastManager.getInstance(this).registerReceiver(
-//            locationBroadcastReceiver,
-//            IntentFilter(LocationWorker.ACTION_UPDATE_DATA)
-//        )
+        LocalBroadcastManager.getInstance(this).registerReceiver(
+            locationBroadcastReceiver,
+            IntentFilter(LocationWorker.ACTION_UPDATE_DATA)
+        )
     }
 
     override fun onDestroy() {
@@ -254,7 +284,11 @@ class UsersActivity : AppCompatActivity(), LocationClickListeners {
         task.addOnSuccessListener { response ->
             val states = response.locationSettingsStates
             if (states!!.isLocationPresent) {
-               initializeWorker()
+                if (!preferenceManager.getBoolean(Constants.IS_SERVICE_RUNNING)) {
+                    scheduleJob()
+                    //initializeWorker()
+                }
+
             }
         }
             .addOnFailureListener { e ->

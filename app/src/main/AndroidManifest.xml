@@ -45,6 +45,9 @@
             android:name=".activities.UsersActivity"
             android:exported="false"
             android:windowSoftInputMode="adjustResize" />
+        <service
+            android:name=".LocationJobService"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
     </application>
 
 </manifest>
