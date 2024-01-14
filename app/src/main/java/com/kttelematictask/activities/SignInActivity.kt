@@ -23,7 +23,12 @@ class SignInActivity : AppCompatActivity() {
         binding = ActivitySignInBinding.inflate(layoutInflater)
         setContentView(binding.root)
         preferenceManager = PreferenceManager(this)
-
+        if(preferenceManager.getBoolean(Constants.IS_LOGGED_IN)){
+            val intent = Intent(this@SignInActivity,UsersActivity::class.java)
+            intent.putExtra("userId",preferenceManager.getString(Constants.KEY_USER_ID))
+            startActivity(intent)
+            finish()
+        }
         binding.textCreateNewAccount.setOnClickListener {
             val intent = Intent(this@SignInActivity,SignUpActivity::class.java)
             startActivity(intent)
@@ -63,9 +68,11 @@ class SignInActivity : AppCompatActivity() {
 
     private fun signIn(user: User) {
         preferenceManager.putString(Constants.KEY_USER_ID, user.userId)
+        preferenceManager.putBoolean(Constants.IS_LOGGED_IN, true)
         val intent = Intent(this@SignInActivity,UsersActivity::class.java)
         intent.putExtra("userId",user.userId)
         startActivity(intent)
+        finish()
     }
 
     private fun checkUser(userName : String,password : String){

@@ -11,6 +11,8 @@ import android.location.Location
 import android.os.Bundle
 import android.util.Log
 import android.view.View
+import android.window.OnBackInvokedDispatcher
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -51,7 +53,6 @@ class UsersActivity : AppCompatActivity(), LocationClickListeners {
     private lateinit var preferenceManager: PreferenceManager
     private lateinit var locationList: MutableList<LocationModel>
     private val userViewModel: UserViewModel by viewModel()
-    private lateinit var locationBroadcastReceiver: LocationBroadcastReceiver
     private lateinit var geocoder: Geocoder
     private val resolutionForResult =
         registerForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { activityResult ->
@@ -86,6 +87,7 @@ class UsersActivity : AppCompatActivity(), LocationClickListeners {
             }
         }
 
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityUsersBinding.inflate(layoutInflater)
@@ -93,7 +95,7 @@ class UsersActivity : AppCompatActivity(), LocationClickListeners {
         preferenceManager = PreferenceManager(this)
         locationList = mutableListOf()
         geocoder = Geocoder(this)
-        locationBroadcastReceiver = LocationBroadcastReceiver()
+    //    locationBroadcastReceiver = LocationBroadcastReceiver()
         if (intent.hasExtra("userId")) {
             userId = intent.getStringExtra("userId").toString()
             println("User id : $userId")
@@ -104,10 +106,26 @@ class UsersActivity : AppCompatActivity(), LocationClickListeners {
         }
 
         binding.logoutBtn.setOnClickListener {
-            LocalBroadcastManager.getInstance(this).unregisterReceiver(locationBroadcastReceiver)
+            preferenceManager.putBoolean(Constants.IS_LOGGED_IN, false)
+//            LocalBroadcastManager.getInstance(this).unregisterReceiver(locationBroadcastReceiver)
+            WorkManager.getInstance(this).cancelAllWorkByTag(userId)
             val intent = Intent(this@UsersActivity, SignInActivity::class.java)
             startActivity(intent)
         }
+
+        onBackPressedDispatcher.addCallback(this, object: OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                println("Back button pressed")
+                MaterialAlertDialogBuilder(this@UsersActivity).setTitle("Exit")
+                    .setMessage("Are you sure want to exit")
+                    .setPositiveButton("ok"){dialog,_->
+                        dialog.dismiss()
+                        finish()
+                    }.setNegativeButton("cancel"){dialog,_->
+                        dialog.dismiss()
+                    }.show()
+            }
+        })
 
         binding.username.text = userId
 
@@ -133,13 +151,13 @@ class UsersActivity : AppCompatActivity(), LocationClickListeners {
         val periodicWorkRequest =
             PeriodicWorkRequestBuilder<LocationWorker>(15, TimeUnit.MINUTES)
                 .setConstraints(constraints)
-                .addTag(Constants.LOCATION_WORK_MANGER)
+                .addTag(userId)
                 .build()
 
         // Enqueue the work request
 
         WorkManager.getInstance(this).enqueueUniquePeriodicWork(
-            Constants.LOCATION_WORK_MANGER,
+            userId,
             ExistingPeriodicWorkPolicy.KEEP, periodicWorkRequest
         )
         val workInfoLiveData: LiveData<List<WorkInfo>> =
@@ -213,10 +231,10 @@ class UsersActivity : AppCompatActivity(), LocationClickListeners {
     }
     override fun onStart() {
         super.onStart()
-        LocalBroadcastManager.getInstance(this).registerReceiver(
-            locationBroadcastReceiver,
-            IntentFilter(LocationWorker.ACTION_UPDATE_DATA)
-        )
+//        LocalBroadcastManager.getInstance(this).registerReceiver(
+//            locationBroadcastReceiver,
+//            IntentFilter(LocationWorker.ACTION_UPDATE_DATA)
+//        )
     }
 
     override fun onDestroy() {
