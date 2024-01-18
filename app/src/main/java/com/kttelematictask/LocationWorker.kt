@@ -44,6 +44,7 @@ class LocationWorker(context: Context, workerParams: WorkerParameters) :
         } catch (e: Exception) {
             Log.e("", "Error getting location", e)
             Result.failure()
+            Result.retry()
         }
     }
 

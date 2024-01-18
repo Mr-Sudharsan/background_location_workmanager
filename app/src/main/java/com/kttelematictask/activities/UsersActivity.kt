@@ -24,6 +24,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LiveData
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
+import androidx.work.BackoffPolicy
 import androidx.work.Constraints
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
@@ -176,6 +177,10 @@ class UsersActivity : AppCompatActivity(), LocationClickListeners {
         val periodicWorkRequest =
             PeriodicWorkRequestBuilder<LocationWorker>(15, TimeUnit.MINUTES)
                 .setConstraints(constraints)
+                .setBackoffCriteria(
+                    BackoffPolicy.LINEAR,
+                    10,TimeUnit.SECONDS
+                )
                 .addTag(userId)
                 .build()
 
