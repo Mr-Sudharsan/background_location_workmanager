@@ -66,8 +66,8 @@ class UsersActivity : AppCompatActivity(), LocationClickListeners {
         registerForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { activityResult ->
             if (activityResult.resultCode == RESULT_OK) {
                 if (!preferenceManager.getBoolean(Constants.IS_SERVICE_RUNNING)) {
-                    scheduleJob()
-                    // initializeWorker()
+                    //scheduleJob()
+                     initializeWorker()
                 }
             } else {
             }
@@ -174,7 +174,7 @@ class UsersActivity : AppCompatActivity(), LocationClickListeners {
 
         // Create the work request
         val periodicWorkRequest =
-            PeriodicWorkRequestBuilder<LocationWorker>(15, TimeUnit.MINUTES, 5, TimeUnit.MINUTES)
+            PeriodicWorkRequestBuilder<LocationWorker>(15, TimeUnit.MINUTES)
                 .setConstraints(constraints)
                 .addTag(userId)
                 .build()
@@ -285,8 +285,8 @@ class UsersActivity : AppCompatActivity(), LocationClickListeners {
             val states = response.locationSettingsStates
             if (states!!.isLocationPresent) {
                 if (!preferenceManager.getBoolean(Constants.IS_SERVICE_RUNNING)) {
-                    scheduleJob()
-                    //initializeWorker()
+                    //scheduleJob()
+                    initializeWorker()
                 }
 
             }
